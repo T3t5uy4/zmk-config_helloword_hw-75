@@ -39,7 +39,7 @@ jobs:
 
           python3 -m venv /tmp/pytools
           /tmp/pytools/bin/pip install -U pip setuptools wheel
-          /tmp/pytools/bin/pip install -U west fonttools pyelftools
+          /tmp/pytools/bin/pip install -U west fonttools pyelftools protobuf
 
           ln -sf /tmp/pytools/bin/west /usr/local/bin/west || true
           ln -sf /tmp/pytools/bin/pyftsubset /usr/local/bin/pyftsubset || true
@@ -80,6 +80,7 @@ jobs:
 
           python -c "import sys; print(sys.executable)"
           python -c "import elftools; print('pyelftools OK')"
+          python -c "import google.protobuf; print('protobuf OK')"
 
       - name: West build
         env:
