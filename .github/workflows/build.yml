@@ -32,7 +32,16 @@ jobs:
           set -eux
 
           apt-get update
-          apt-get install -y python3-pip python3-venv protobuf-compiler curl git ca-certificates
+          apt-get install -y \
+            python3-pip \
+            python3-venv \
+            python3-setuptools \
+            python3-protobuf \
+            python3-pyelftools \
+            protobuf-compiler \
+            curl \
+            git \
+            ca-certificates
 
           curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
           apt-get install -y nodejs
@@ -81,6 +90,10 @@ jobs:
           python -c "import sys; print(sys.executable)"
           python -c "import elftools; print('pyelftools OK')"
           python -c "import google.protobuf; print('protobuf OK')"
+          python -c "import pkg_resources; print('pkg_resources OK')"
+
+          /usr/bin/python3 -c "import pkg_resources; print('system pkg_resources OK')"
+          /usr/bin/python3 -c "import google.protobuf; print('system protobuf OK')"
 
       - name: West build
         env:
