@@ -47,7 +47,8 @@ jobs:
           apt-get install -y nodejs
 
           python3 -m venv /tmp/pytools
-          /tmp/pytools/bin/pip install -U pip setuptools wheel
+          /tmp/pytools/bin/pip install -U pip wheel
+          /tmp/pytools/bin/pip install "setuptools<81"
           /tmp/pytools/bin/pip install -U west fonttools pyelftools protobuf
 
           ln -sf /tmp/pytools/bin/west /usr/local/bin/west || true
@@ -88,6 +89,7 @@ jobs:
           export PATH="/tmp/pytools/bin:$PATH"
 
           python -c "import sys; print(sys.executable)"
+          python -m pip show setuptools
           python -c "import elftools; print('pyelftools OK')"
           python -c "import google.protobuf; print('protobuf OK')"
           python -c "import pkg_resources; print('pkg_resources OK')"
