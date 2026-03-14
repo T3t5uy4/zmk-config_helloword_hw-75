@@ -1,7 +1,12 @@
+name: Build ZMK Firmware
+
 on:
   push:
   pull_request:
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -13,39 +18,28 @@ jobs:
     strategy:
       matrix:
         include:
-          - { board: hw75_keyboard@1.1, keymap: hw75_keyboard.keymap  }
-          - { board: hw75_keyboard@1.2, keymap: hw75_keyboard.keymap  }
-          - { board: hw75_dynamic@A,    keymap: hw75_dynamic.keymap   }
-          - { board: hw75_dynamic@B,    keymap: hw75_dynamic.keymap   }
+          - { board: hw75_keyboard@1.1, keymap: hw75_keyboard.keymap }
+          - { board: hw75_keyboard@1.2, keymap: hw75_keyboard.keymap }
+          - { board: hw75_dynamic@A,    keymap: hw75_dynamic.keymap }
+          - { board: hw75_dynamic@B,    keymap: hw75_dynamic.keymap }
 
     steps:
       - name: Prepare variables
         run: |
-          echo "zephyr_version=${ZEPHYR_VERSION}" >> $GITHUB_ENV
+          echo "zephyr_version=${ZEPHYR_VERSION}" >> "$GITHUB_ENV"
 
       - name: Checkout
         uses: actions/checkout@v4
-    
+
       - name: Set up build tools
         run: |
           apt-get update
-          # 安装必要的系统包，包括 python3-venv
-          apt-get install -y python3-pip protobuf-compiler curl python3-venv
+          apt-get install -y python3-pip protobuf-compiler curl
           curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
           apt-get install -y nodejs
-    
-          # 创建 Python 虚拟环境（存放在 /github/home 下，该目录可写）
-          python3 -m venv /github/home/venv
-    
-          # 将虚拟环境的 bin 目录添加到 GITHUB_PATH，使后续步骤的 python/pip 默认使用虚拟环境
-          echo "/github/home/venv/bin" >> $GITHUB_PATH
-    
-          # 在虚拟环境中安装 fonttools
           pip install -U fonttools
-    
-          # 安装 Node.js 工具
           npm install -g lv_font_conv
-    
+
       - name: Cache west modules
         uses: actions/cache@v4
         continue-on-error: true
@@ -61,50 +55,49 @@ jobs:
             ${{ runner.os }}-build-${{ env.cache_name }}-
             ${{ runner.os }}-build-
             ${{ runner.os }}-
-    
+
       - name: Prepare west
         run: |
-          # 此时 PATH 已包含虚拟环境，pip 直接使用虚拟环境的 pip
           west init -l config
           west update
           west zephyr-export
           pip install -r zephyr/scripts/requirements.txt
-          git config --global --add safe.directory $PWD
-        env:
-          PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION: python
-    
-      # 后续步骤（West build, Rename artifacts, Archive）保持不变
-      # ...
+          git config --global --add safe.directory "$PWD"
 
       - name: West build
-        run: |
-          west build -s zmk/app -b ${{ matrix.board }} -- \
-            -DZMK_CONFIG=${GITHUB_WORKSPACE}/config \
-            -DKEYMAP_FILE=${GITHUB_WORKSPACE}/config/${{ matrix.keymap }}
         env:
           PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION: python
+        run: |
+          west build -s zmk/app -b "${{ matrix.board }}" -- \
+            -DZMK_CONFIG="${GITHUB_WORKSPACE}/config" \
+            -DKEYMAP_FILE="${GITHUB_WORKSPACE}/config/${{ matrix.keymap }}"
 
       - name: Rename artifacts
         run: |
-          mkdir build/artifacts
+          mkdir -p build/artifacts
+
           if [ -f build/zephyr/zmk.uf2 ]; then
             cp build/zephyr/zmk.uf2 "build/artifacts/${{ matrix.board }}-zmk.uf2"
           fi
+
           if [ -f build/zephyr/zmk.hex ]; then
             cp build/zephyr/zmk.hex "build/artifacts/${{ matrix.board }}-zmk.hex"
           fi
-          cp build/zephyr/zmk.bin "build/artifacts/${{ matrix.board }}-zmk.bin"
+
+          if [ -f build/zephyr/zmk.bin ]; then
+            cp build/zephyr/zmk.bin "build/artifacts/${{ matrix.board }}-zmk.bin"
+          fi
 
       - name: Archive
         uses: actions/upload-artifact@v4
         with:
-          name: firmware
+          name: firmware-${{ matrix.board }}
           path: build/artifacts
+          if-no-files-found: error
 
   release:
     if: ${{ startsWith(github.ref, 'refs/tags/') }}
     needs: build
-
     runs-on: ubuntu-latest
 
     steps:
@@ -114,16 +107,17 @@ jobs:
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
-          name: firmware
+          pattern: firmware-*
           path: firmware
+          merge-multiple: true
 
       - name: Prepare release notes
         id: release
         run: |
           EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
-          echo "RELEASE_BODY<<$EOF" >> $GITHUB_OUTPUT
-          sed 's/{{TAG}}/${{ github.ref_name }}/g' .github/RELEASE_TEMPLATE.md >> $GITHUB_OUTPUT
-          echo "$EOF" >> $GITHUB_OUTPUT
+          echo "RELEASE_BODY<<$EOF" >> "$GITHUB_OUTPUT"
+          sed 's/{{TAG}}/${{ github.ref_name }}/g' .github/RELEASE_TEMPLATE.md >> "$GITHUB_OUTPUT"
+          echo "$EOF" >> "$GITHUB_OUTPUT"
 
       - name: Publish release
         uses: svenstaro/upload-release-action@v2
