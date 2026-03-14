@@ -11,15 +11,10 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 90
 
     container:
       image: zmkfirmware/zmk-build-arm:stable
-
-    strategy:
-      matrix:
-        include:
-          - board: hw75_keyboard@1.2
-            keymap: hw75_keyboard.keymap
 
     steps:
       - name: Prepare variables
@@ -34,7 +29,7 @@ jobs:
           set -eux
 
           apt-get update
-          apt-get install -y python3-pip python3-venv protobuf-compiler curl
+          apt-get install -y python3-pip python3-venv protobuf-compiler curl git ca-certificates
 
           curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
           apt-get install -y nodejs
@@ -71,9 +66,8 @@ jobs:
           export PATH="/tmp/pytools/bin:$PATH"
 
           west init -l config
-          west update
+          west update --narrow || west update --narrow
           west zephyr-export
-          pip install -r zephyr/scripts/requirements.txt
           git config --global --add safe.directory "$PWD"
 
       - name: West build
@@ -83,65 +77,30 @@ jobs:
           set -eux
           export PATH="/tmp/pytools/bin:$PATH"
 
-          west build -s zmk/app -b "${{ matrix.board }}" -- \
+          west build -s zmk/app -b "hw75_keyboard@1.2" -- \
             -DZMK_CONFIG="${GITHUB_WORKSPACE}/config" \
-            -DKEYMAP_FILE="${GITHUB_WORKSPACE}/config/${{ matrix.keymap }}"
+            -DKEYMAP_FILE="${GITHUB_WORKSPACE}/config/hw75_keyboard.keymap"
 
-      - name: Rename artifacts
+      - name: Collect artifacts
         run: |
           set -eux
           mkdir -p build/artifacts
 
           if [ -f build/zephyr/zmk.uf2 ]; then
-            cp build/zephyr/zmk.uf2 "build/artifacts/${{ matrix.board }}-zmk.uf2"
+            cp build/zephyr/zmk.uf2 build/artifacts/hw75_keyboard@1.2-zmk.uf2
           fi
 
           if [ -f build/zephyr/zmk.hex ]; then
-            cp build/zephyr/zmk.hex "build/artifacts/${{ matrix.board }}-zmk.hex"
+            cp build/zephyr/zmk.hex build/artifacts/hw75_keyboard@1.2-zmk.hex
           fi
 
           if [ -f build/zephyr/zmk.bin ]; then
-            cp build/zephyr/zmk.bin "build/artifacts/${{ matrix.board }}-zmk.bin"
+            cp build/zephyr/zmk.bin build/artifacts/hw75_keyboard@1.2-zmk.bin
           fi
 
-      - name: Archive
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: firmware-${{ matrix.board }}
+          name: firmware-hw75_keyboard-1_2
           path: build/artifacts
           if-no-files-found: error
-
-  release:
-    if: ${{ startsWith(github.ref, 'refs/tags/') }}
-    needs: build
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
-        with:
-          pattern: firmware-*
-          path: firmware
-          merge-multiple: true
-
-      - name: Prepare release notes
-        id: release
-        run: |
-          EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
-          echo "RELEASE_BODY<<$EOF" >> "$GITHUB_OUTPUT"
-          sed 's/{{TAG}}/${{ github.ref_name }}/g' .github/RELEASE_TEMPLATE.md >> "$GITHUB_OUTPUT"
-          echo "$EOF" >> "$GITHUB_OUTPUT"
-
-      - name: Publish release
-        uses: svenstaro/upload-release-action@v2
-        with:
-          file: firmware/*
-          file_glob: true
-          tag: ${{ github.ref }}
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          body: |
-            ${{ steps.release.outputs.RELEASE_BODY }}
-          prerelease: true
