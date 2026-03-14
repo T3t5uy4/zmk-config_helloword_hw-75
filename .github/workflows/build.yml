@@ -18,10 +18,14 @@ jobs:
     strategy:
       matrix:
         include:
-          - { board: hw75_keyboard@1.1, keymap: hw75_keyboard.keymap }
-          - { board: hw75_keyboard@1.2, keymap: hw75_keyboard.keymap }
-          - { board: hw75_dynamic@A,    keymap: hw75_dynamic.keymap }
-          - { board: hw75_dynamic@B,    keymap: hw75_dynamic.keymap }
+          - board: hw75_keyboard@1.1
+            keymap: hw75_keyboard.keymap
+          - board: hw75_keyboard@1.2
+            keymap: hw75_keyboard.keymap
+          - board: hw75_dynamic@A
+            keymap: hw75_dynamic.keymap
+          - board: hw75_dynamic@B
+            keymap: hw75_dynamic.keymap
 
     steps:
       - name: Prepare variables
@@ -33,15 +37,21 @@ jobs:
 
       - name: Set up build tools
         run: |
+          set -eux
+
           apt-get update
           apt-get install -y python3-pip python3-venv protobuf-compiler curl
+
           curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
           apt-get install -y nodejs
 
           python3 -m venv /tmp/pytools
-          /tmp/pytools/bin/pip install -U pip fonttools
+          /tmp/pytools/bin/pip install -U pip setuptools wheel
+          /tmp/pytools/bin/pip install -U fonttools west
+
           ln -sf /tmp/pytools/bin/pyftsubset /usr/local/bin/pyftsubset
           ln -sf /tmp/pytools/bin/fonttools /usr/local/bin/fonttools || true
+          ln -sf /tmp/pytools/bin/west /usr/local/bin/west || true
 
           npm install -g lv_font_conv
 
@@ -63,6 +73,9 @@ jobs:
 
       - name: Prepare west
         run: |
+          set -eux
+          export PATH="/tmp/pytools/bin:$PATH"
+
           west init -l config
           west update
           west zephyr-export
@@ -73,12 +86,16 @@ jobs:
         env:
           PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION: python
         run: |
+          set -eux
+          export PATH="/tmp/pytools/bin:$PATH"
+
           west build -s zmk/app -b "${{ matrix.board }}" -- \
             -DZMK_CONFIG="${GITHUB_WORKSPACE}/config" \
             -DKEYMAP_FILE="${GITHUB_WORKSPACE}/config/${{ matrix.keymap }}"
 
       - name: Rename artifacts
         run: |
+          set -eux
           mkdir -p build/artifacts
 
           if [ -f build/zephyr/zmk.uf2 ]; then
