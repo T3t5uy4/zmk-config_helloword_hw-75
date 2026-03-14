@@ -5,6 +5,9 @@ on:
   pull_request:
   workflow_dispatch:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 permissions:
   contents: write
 
@@ -22,7 +25,7 @@ jobs:
           echo "zephyr_version=${ZEPHYR_VERSION}" >> "$GITHUB_ENV"
 
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up build tools
         run: |
@@ -36,16 +39,16 @@ jobs:
 
           python3 -m venv /tmp/pytools
           /tmp/pytools/bin/pip install -U pip setuptools wheel
-          /tmp/pytools/bin/pip install -U fonttools west
+          /tmp/pytools/bin/pip install -U west fonttools pyelftools
 
-          ln -sf /tmp/pytools/bin/pyftsubset /usr/local/bin/pyftsubset
-          ln -sf /tmp/pytools/bin/fonttools /usr/local/bin/fonttools || true
           ln -sf /tmp/pytools/bin/west /usr/local/bin/west || true
+          ln -sf /tmp/pytools/bin/pyftsubset /usr/local/bin/pyftsubset || true
+          ln -sf /tmp/pytools/bin/fonttools /usr/local/bin/fonttools || true
 
           npm install -g lv_font_conv
 
       - name: Cache west modules
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         continue-on-error: true
         env:
           cache_name: cache-zephyr-${{ env.zephyr_version }}-modules
@@ -69,6 +72,14 @@ jobs:
           west update --narrow || west update --narrow
           west zephyr-export
           git config --global --add safe.directory "$PWD"
+
+      - name: Verify Python build deps
+        run: |
+          set -eux
+          export PATH="/tmp/pytools/bin:$PATH"
+
+          python -c "import sys; print(sys.executable)"
+          python -c "import elftools; print('pyelftools OK')"
 
       - name: West build
         env:
